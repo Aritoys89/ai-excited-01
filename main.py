@@ -1,58 +1,73 @@
-"""ai-excited-01 entry: "The Wave That Roars".
+"""The Wave That Roars — ai-excited-01 entry.
 
-This program writes the entry image (art.jpg, stored next to this file)
-to the output entry file: $MAKEFUN_OUTPUT_DIR/entry.png when that
-environment variable is set, otherwise /output/entry.png. The image
-bytes are copied unchanged, after a magic-byte check that they are a
-real JPEG or PNG.
+Copies the bundled artwork (art.jpg, a JPEG) to /output/entry.png
+after checking it is a real JPEG inside the competition's limits.
+Standard library only.
 """
-import os
+
+import struct
 import sys
+from pathlib import Path
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-SOURCE = os.path.join(HERE, "art.jpg")
+HERE = Path(__file__).resolve().parent
+SOURCE = HERE / "art.jpg"
+DEST = Path("/output/entry.png")
 
-JPEG_MAGIC = b"\xff\xd8"
-PNG_MAGIC = b"\x89\x50"
-
-
-def output_path():
-    out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR", "/output")
-    return os.path.join(out_dir, "entry.png")
+MAX_BYTES = 1_048_576
+MAX_SIDE = 1024
+JPEG_MAGIC = b"\xff\xd8\xff"
 
 
-def check_image_magic(data):
-    """Accept JPEG or PNG content; refuse anything else with a clear error."""
-    if data[:3] == b"\xff\xd8\xff":
-        return "JPEG"
-    if data[:2] == PNG_MAGIC:
-        return "PNG"
-    raise ValueError(
-        "source image is neither JPEG nor PNG (first bytes: %s)"
-        % (data[:4].hex(" ") or "<empty file>")
-    )
+def jpeg_dimensions(blob: bytes) -> tuple[int, int]:
+    """Read width/height out of a JPEG's first SOF0/SOF2 marker."""
+    pos = 2
+    while pos + 9 <= len(blob):
+        if blob[pos] != 0xFF:
+            pos += 1
+            continue
+        marker = blob[pos + 1]
+        if marker in (0xC0, 0xC1, 0xC2):
+            height, width = struct.unpack(">HH", blob[pos + 5:pos + 9])
+            return width, height
+        if marker in (0xD8, 0x01) or 0xD0 <= marker <= 0xD7:
+            pos += 2
+            continue
+        size = struct.unpack(">H", blob[pos + 2:pos + 4])[0]
+        pos += 2 + size
+    raise ValueError("no SOF marker found in JPEG")
 
 
-def main():
-    with open(SOURCE, "rb") as f:
-        data = f.read()
-    kind = check_image_magic(data)
+def main() -> int:
+    data = SOURCE.read_bytes()
 
-    dest = output_path()
-    os.makedirs(os.path.dirname(dest), exist_ok=True)
-    with open(dest, "wb") as f:
-        written = f.write(data)
+    if data[:3] != JPEG_MAGIC:
+        print("error: art.jpg is not a JPEG (bad magic bytes)", file=sys.stderr)
+        return 1
+    if data[-2:] != b"\xff\xd9":
+        print("error: art.jpg is truncated (no JPEG end marker)", file=sys.stderr)
+        return 1
+    if len(data) > MAX_BYTES:
+        print(f"error: art.jpg is {len(data)} bytes, over the 1 MiB cap",
+              file=sys.stderr)
+        return 1
+    width, height = jpeg_dimensions(data)
+    if width > MAX_SIDE or height > MAX_SIDE:
+        print(f"error: art.jpg is {width}x{height}, over the 1024 cap",
+              file=sys.stderr)
+        return 1
 
-    if written != len(data):
-        raise IOError(
-            "short write to %s: %d of %d bytes" % (dest, written, len(data))
-        )
-    print("wrote %s (%s, %d bytes, source %d bytes)" % (dest, kind, written, len(data)))
+    DEST.parent.mkdir(parents=True, exist_ok=True)
+    DEST.write_bytes(data)
+
+    written = DEST.read_bytes()
+    if written != data:
+        print("error: output does not match source", file=sys.stderr)
+        return 1
+
+    print(f"wrote {DEST} ({width}x{height}, {len(data)} bytes, JPEG; "
+          f"source art.jpg {len(data)} bytes, identical)")
+    return 0
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except (OSError, ValueError) as exc:
-        print("error: %s" % exc, file=sys.stderr)
-        raise SystemExit(1)
+    raise SystemExit(main())
