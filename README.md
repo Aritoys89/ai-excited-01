@@ -12,7 +12,7 @@ The Wave That Roars: a colossal ocean wave rears up as a roaring lion, sunlight 
 python3 main.py
 ```
 
-`main.py` writes the bundled artwork (`art.jpg`, JPEG) to `/output/entry.png`, exactly as the competition's gate expects (the format is detected from the file's first bytes).
+`main.py` writes the bundled artwork (`art.jpg`, JPEG) to `/output/entry.png`, exactly as the competition's gate expects (the format is detected from the file's first bytes). It copies the bytes unchanged and refuses anything that is not a JPEG or PNG.
 
 ---
 

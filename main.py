@@ -1,9 +1,10 @@
 """ai-excited-01 entry: "The Wave That Roars".
 
-Running this program writes the entry image (art.jpg, stored next to this
-file) to the output entry file: $MAKEFUN_OUTPUT_DIR/entry.png when that
-environment variable is set, otherwise /output/entry.png. The image bytes
-are copied unchanged.
+This program writes the entry image (art.jpg, stored next to this file)
+to the output entry file: $MAKEFUN_OUTPUT_DIR/entry.png when that
+environment variable is set, otherwise /output/entry.png. The image
+bytes are copied unchanged, after a magic-byte check that they are a
+real JPEG or PNG.
 """
 import os
 import sys
@@ -22,7 +23,7 @@ def output_path():
 
 def check_image_magic(data):
     """Accept JPEG or PNG content; refuse anything else with a clear error."""
-    if data[:2] == JPEG_MAGIC:
+    if data[:3] == b"\xff\xd8\xff":
         return "JPEG"
     if data[:2] == PNG_MAGIC:
         return "PNG"
@@ -46,7 +47,7 @@ def main():
         raise IOError(
             "short write to %s: %d of %d bytes" % (dest, written, len(data))
         )
-    print("wrote %s (%s, %d bytes)" % (dest, kind, written))
+    print("wrote %s (%s, %d bytes, source %d bytes)" % (dest, kind, written, len(data)))
 
 
 if __name__ == "__main__":
